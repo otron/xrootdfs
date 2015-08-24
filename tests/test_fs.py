@@ -10,30 +10,50 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
+import os
 from os.path import exists, join
 
 import pytest
 from fixture import mkurl, tmppath
 from fs.errors import BackReferenceError, DestinationExistsError, \
     DirectoryNotEmptyError, InvalidPathError, ResourceInvalidError
-from xrootdfs import XRootDFS
+from xrootdfs import XRootDFile, XRootDFS
+from xrootdfs.utils import spliturl
 
 
-def test_init():
+def test_init(tmppath):
     """Test initialization."""
-    fs = XRootDFS("root://127.0.0.1/tmp/")
+    fs = XRootDFS("root://127.0.0.1//tmp/")
     assert fs.client
-    assert fs.base_path == "/tmp/"
+    assert fs.base_path == "//tmp/"
+    assert fs.root_url == "root://127.0.0.1"
 
-    XRootDFS("root://user:pw@eosuser.cern.ch/")
-    XRootDFS("root://eosuser.cern.ch")
-    XRootDFS("root://eosuser.cern.ch")
+    XRootDFS("root://user:pw@eosuser.cern.ch//")
+    XRootDFS("root://eosuser.cern.ch//")
+    XRootDFS("root://eosuser.cern.ch//")
     pytest.raises(InvalidPathError, XRootDFS, "http://localhost")
+    pytest.raises(InvalidPathError, XRootDFS, "root://eosuser.cern.ch//lhc//")
+
+    rooturl = mkurl(tmppath)
+    fs = XRootDFS(rooturl)
+    root_url, base_path, qargs = spliturl(rooturl)
+    assert fs.client
+    assert fs.base_path == base_path
+    assert fs.root_url == root_url
+    assert fs.query is None
+
+    qarg = "xrd.wantprot=krb5"
+    fs = XRootDFS(rooturl + '?' + qarg)
+    root_url, base_path, qargs = spliturl(rooturl + '?' + qarg)
+    assert fs.base_path == base_path
+    assert fs.root_url == root_url
+    assert fs.query == qarg
+    assert qargs == qarg
 
 
 def test_p():
     """Test path combine."""
-    fs = XRootDFS("root://eosuser.cern.ch/eos/user/")
+    fs = XRootDFS("root://eosuser.cern.ch//eos/user/")
     assert fs._p("./") == "/eos/user"
     assert fs._p("l") == "/eos/user/l"
     assert fs._p("/eos") == "/eos"
@@ -149,3 +169,22 @@ def test_remove(tmppath):
     # Remove emptydir
     assert XRootDFS(rooturl).makedir("emptydir")
     assert XRootDFS(rooturl).remove("emptydir")
+
+
+def test_open(tmppath):
+    """Test fs.open()"""
+    # Create a file to open.
+    file_name = 'data/testa.txt'
+    contents = 'testa.txt'
+    xrd_rooturl = mkurl(tmppath)
+
+    full_file_path = join(tmppath, file_name)
+
+    # Open file w/ xrootd
+    xrdfs = XRootDFS(xrd_rooturl)
+    xfile = xrdfs.open(file_name, mode='r')
+    assert xfile
+    assert type(xfile) == XRootDFile
+
+    # cleanup
+    os.remove(full_file_path)

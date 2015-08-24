@@ -16,7 +16,7 @@ from fs.opener import Opener, OpenerError, opener
 from fs.path import pathsplit
 
 from .fs import XRootDFS
-from .utils import is_valid_url
+from .utils import is_valid_url, spliturl
 
 
 class XRootDOpener(Opener):
@@ -42,17 +42,11 @@ class XRootDOpener(Opener):
         """
         fs_url = "{0}://{1}".format(fs_name, fs_path)
 
-        if not is_valid_url(fs_url):
-            raise OpenerError('Invalid XRootD URL.')
+        root_url, path, query = spliturl(fs_url)
 
-        scheme, netloc, path, params, query, fragment = urlparse(fs_url)
-
-        root_url = "{scheme}://{netloc}?{query}".format(
-            scheme=scheme, netloc=netloc, query=query
-        )
         dirpath, resourcepath = pathsplit(path)
 
-        fs = XRootDFS(root_url)
+        fs = XRootDFS(root_url + dirpath + query)
 
         if create_dir and path:
             fs.makedir(path, recursive=True, allow_recreate=True)
@@ -64,5 +58,6 @@ class XRootDOpener(Opener):
             return fs, None
         else:
             return fs, resourcepath
+
 
 opener.add(XRootDOpener)

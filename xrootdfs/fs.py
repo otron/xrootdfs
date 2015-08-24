@@ -14,14 +14,15 @@ import re
 from glob import fnmatch
 
 from fs.base import FS
-from fs.errors import DestinationExistsError, FSError, InvalidPathError, \
-    ResourceInvalidError, UnsupportedError, DirectoryNotEmptyError
+from fs.errors import DestinationExistsError, DirectoryNotEmptyError, \
+    FSError, InvalidPathError, ResourceInvalidError, UnsupportedError
 from fs.path import normpath, pathcombine, pathjoin
 from XRootD.client import FileSystem
 from XRootD.client.flags import AccessMode, DirListFlags, MkDirFlags, \
-    StatInfoFlags
+    OpenFlags, StatInfoFlags
 
-from .utils import is_valid_url, spliturl
+from .utils import is_valid_path, is_valid_url, spliturl
+from .xrdfile import XRootDFile
 
 
 class XRootDFS(FS):
@@ -42,15 +43,20 @@ class XRootDFS(FS):
         'atomic.setcontents': True
     }
 
-    def __init__(self, url, timeout=0, thread_synchronize=True):
+    def __init__(self, url, query=None, timeout=0, thread_synchronize=True):
         """."""
         if not is_valid_url(url):
             raise InvalidPathError(path=url)
 
-        root_url, base_path = spliturl(url)
+        root_url, base_path, queryargs = spliturl(url)
+
+        if not is_valid_path(base_path):
+            raise InvalidPathError(path=base_path)
 
         self.timeout = timeout
+        self.root_url = root_url
         self.base_path = base_path
+        self.query = queryargs or query
         self.client = FileSystem(root_url)
         super(XRootDFS, self).__init__(thread_synchronize=thread_synchronize)
 
@@ -80,12 +86,9 @@ class XRootDFS(FS):
         :raises `fs.errors.ResourceNotFoundError`: if the path is not found
         """
         # path must be full-on address with the server and everything, yo.
-        # flags = 0
-        # if 'r' in mode:
-        #     flags += OpenFlags.READ
-
-        # return XRootDFile(self._url + path, flags, mode=0)
-        return 1
+        return XRootDFile(self.root_url + self._p(path),
+                          mode, buffering, encoding, errors, newline,
+                          line_buffering, **kwargs)
 
     def listdir(self,
                 path="./",

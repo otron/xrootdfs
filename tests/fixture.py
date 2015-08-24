@@ -11,13 +11,14 @@
 import shutil
 import tempfile
 from os.path import dirname, join
+from uuid import uuid4
 
 import pytest
 
 
 def mkurl(p):
     """Generate test root URL."""
-    return "root://localhost{0}".format(p)
+    return "root://localhost/{0}".format(p)
 
 
 @pytest.fixture
