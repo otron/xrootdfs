@@ -629,3 +629,29 @@ def test_write_and_read(tmppath):
     assert xfile.tell() == pfile.tell()
     assert xfile.read() == pfile.read()
     assert xfile.tell() == pfile.tell()
+
+
+def test_timeout(tmppath):
+    """Simple test of the timeout parameter."""
+    fd = get_tsta_file(tmppath)
+    fp, fc = fd['full_path'], fd['contents']
+
+    # Setting the file's timeout to -1 is OK.
+    xf = XRootDFile(mkurl(fp), mode='r+', timeout=-1)
+    assert xf.timeout == -1
+    # However when we try to read it throws a fit as it attempts to
+    # convert it to an unsigned long.
+    pytest.raises(OverflowError, xf.read)
+    pytest.raises(OverflowError, xf.write, 'waht')
+    # Seeking is OK because it doesn't interact with XRootD.
+    xf.seek(0)
+    # However .size does interact with XRootD
+    # _file.stat() doesn't mind timeout being -1 apparently. Weeiiiird.
+    assert xf.size != -1
+    statmsg, res = xf._file.stat(timeout=-1)
+    assert statmsg.ok
+    assert not statmsg.error
+    xf.close()
+
+    xf = XRootDFile(mkurl(fp), mode='r+', timeout=1)
+    assert xf.read() == fc
