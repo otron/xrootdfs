@@ -845,11 +845,18 @@ def test_readline(tmppath):
     fp, fc = fd['full_path'], fd['contents']
     fp2 = fb['full_path']
 
-    xfile, pfile = XRootDFile(mkurl(fp), 'r'), open(fp2, 'r')
+    xfile, pfile = XRootDFile(mkurl(fp), 'r'), opener.open(fp2, 'r')
 
     assert xfile.readline() == pfile.readline()
     assert xfile.readline() == pfile.readline()
     assert xfile.readline() == pfile.readline()
+
+    xfile.close(), pfile.close()
+    xfile, pfile = XRootDFile(mkurl(fp), 'r'), opener.open(fp2, 'r')
+    assert xfile.readline() == pfile.readline()
+    xfile.seek(0), pfile.seek(0)
+    assert xfile.readline() == pfile.readline()
+    assert xfile.tell(), pfile.tell()
 
     xfile.close(), pfile.close()
     xfile = XRootDFile(mkurl(fp), 'w+')
@@ -876,3 +883,30 @@ def test_readline(tmppath):
     xfile.seek(0)
     assert xfile.readline() == str2
     assert xfile.readline() == u'\x00'+str2
+
+
+def test_readlines(tmppath):
+    """Tests readlines()"""
+    fd = get_mltl_file(tmppath)
+    fb = get_copy_file(fd)
+    fp, fc = fd['full_path'], fd['contents']
+    fp2 = fb['full_path']
+
+    xfile, pfile = XRootDFile(mkurl(fp), 'r'), open(fp2, 'r')
+
+    prl = pfile.readlines()
+    xrl = xfile.readlines()
+    print(prl)
+    print(xrl)
+    # assert xfile.readlines() == pfile.readlines()
+
+    xfile.seek(0), pfile.seek(0)
+    # assert pfile.readlines() == xfile.readlines()
+    # assert pfile.readlines() == prl
+    # assert xfile.readlines() == fc
+
+    xfile.close(), pfile.close()
+
+    xfile, pfile = XRootDFile(mkurl(fp), 'w+'), open(fp2, 'w+')
+    xfile.seek(0), pfile.seek(0)
+    # assert xfile.readlines() == pfile.readlines()

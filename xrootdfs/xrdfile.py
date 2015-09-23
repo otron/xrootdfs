@@ -10,9 +10,11 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
+import six
 from fs import SEEK_CUR, SEEK_END, SEEK_SET
 from fs.errors import InvalidPathError, PathError, ResourceNotFoundError, \
     UnsupportedError
+from six import PY3, b
 from XRootD.client import File
 
 from .utils import is_valid_path, is_valid_url, spliturl, \
@@ -79,6 +81,11 @@ class XRootDFile(object):
         self._errors = errors
         self._newline = newline
         self._line_buffering = line_buffering
+        self._bufsize = 1024*64
+        self._rbuffer = b('')    # data that's been read but not returned
+        self._wbuffer = None     # data that's been given but not written
+        self._sbuffer = None     # data between real & apparent file pos
+        self._soffset = 0        # internal offset of file pointer
         self.timeout = timeout
 
         # flag translation
@@ -165,10 +172,39 @@ class XRootDFile(object):
         not 0, an empty string is returned only when EOF is encountered
         immediately.
         """
-        chunksize = sizehint if sizehint is not None else 0
+        # chunksize = sizehint if sizehint is not None else 0
 
-        self._assert_mode("r-")
-        return self._file.readline(chunksize=chunksize)
+        # self._assert_mode("r-")
+        # return self._file.readline(chunksize=chunksize)
+        size = sizehint if sizehint is not None else -1
+        bits = []
+        indx = -1
+        sizeSoFar = 0
+        while indx == -1:
+            nextBit = self.read(self._bufsize)
+            bits.append(nextBit)
+            sizeSoFar += len(nextBit)
+            if not nextBit:
+                break
+            if size > 0 and sizeSoFar >= size:
+                break
+            indx = nextBit.find(b("\n"))
+        # If not found, return whole string up to <size> length
+        # Any leftovers are pushed onto front of buffer
+        if indx == -1:
+            data = b("").join(bits)
+            if size > 0 and sizeSoFar > size:
+                extra = data[size:]
+                data = data[:size]
+                self._rbuffer = extra + self._rbuffer
+            return data
+        # If found, push leftovers onto front of buffer
+        # Add one to preserve the newline in the return value
+        indx += 1
+        extra = bits[-1][indx:]
+        bits[-1] = bits[-1][:indx]
+        self._rbuffer = extra + self._rbuffer
+        return b("").join(bits)
 
     def readlines(self, sizehint=None):
         """Read until EOF using readline().
@@ -178,8 +214,10 @@ class XRootDFile(object):
         lines totalling approximately sizehint bytes (possibly after rounding
         up to an internal buffer size) are read.
         """
+        chunksize = sizehint if sizehint is not None else 0
+
         self._assert_mode("r-")
-        return self._file.readlines(chunksize=sizehint)
+        return self._file.readlines(chunksize=chunksize)
 
     def xreadlines(self):
         """Get an iterator over number of lines."""
